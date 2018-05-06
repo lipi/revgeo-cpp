@@ -2,14 +2,16 @@
 
 #include "spdlog/spdlog.h"
 #include "spdlog/fmt/ostr.h"
-#include "SQLiteCpp/SQLiteCpp.h"
+
+#include "RoadData.h"
+
+static const char* DB_FILE = "data/tiles.sqlite";
 
 int main() {
     auto console = spdlog::stdout_color_mt("console");
     spdlog::set_level(spdlog::level::info);
 
-    spdlog::get("console")->info("Opening DB...");
-    SQLite::Database db("data/tiles.sqlite");
-    std::cout << "Hello, World!" << std::endl;
+    RoadData roadData(DB_FILE);
+
     return 0;
 }
