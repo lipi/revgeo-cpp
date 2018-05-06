@@ -13,5 +13,7 @@ int main() {
 
     RoadData roadData(DB_FILE);
 
+    while (true) {}
+
     return 0;
 }
