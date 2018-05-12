@@ -14,8 +14,9 @@ using namespace rapidjson;
 class RoadData {
 
 public:
-    typedef int32_t cdegree_t;
+    typedef int32_t cdegree_t; // centi-degree, i.e. hundreth-degreee
     typedef uint32_t offset_t;
+    typedef uint32_t length_t;
     typedef uint32_t key_t;
     typedef uint32_t rsid_t;
 
@@ -26,18 +27,19 @@ public:
 
     typedef struct {
         rsid_t id;
-        size_t size;
+        length_t size;
         point_t points[1];
     } roadsegment_t;
 
     typedef struct {
         key_t clatclon;
-        size_t size;
+        length_t size;
         offset_t offsets[1];
     } tile_t;
 
     explicit RoadData(std::string dbFileName, size_t limit = 0);
     ~RoadData();
+    std::vector<roadsegment_t*> GetRoadsegments(float lat, float lon);
 
 private:
 
@@ -45,6 +47,7 @@ private:
     key_t GetKey(cdegree_t clat, cdegree_t clon);
     offset_t AddTile(key_t clatclon, offset_t* pOffsets, size_t num);
     offset_t AddRoadSegment(rsid_t rsid, const GenericArray<true, Value>& points );
+    tile_t* GetTile(float lat, float lon);
 
     std::unique_ptr<SQLite::Database> m_pDb;
     std::shared_ptr<spdlog::logger> m_pLog;

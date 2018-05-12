@@ -9,7 +9,6 @@ RoadData::RoadData(std::string dbFileName, size_t limit) :
         m_TileSize(1000),
         m_RoadSegmentSize(1000)
 {
-
     m_pLog = spdlog::get("console");
 
     m_pLog->info("Opening DB...");
@@ -68,7 +67,35 @@ void RoadData::LoadTiles(size_t limit) {
     m_pLog->info("Loaded {} tiles", m_Grid.size());
 }
 
-RoadData::key_t RoadData::GetKey(int clat, int clon) {
+std::vector<RoadData::roadsegment_t*> RoadData::GetRoadsegments(float lat, float lon) {
+    std::vector<roadsegment_t*> roads;
+
+    tile_t* pTile = GetTile(lat, lon);
+
+    for (int i = 0; i < pTile->size; i++) {
+        offset_t roadOffset = pTile->offsets[i];
+        roadsegment_t* pRoad = reinterpret_cast<roadsegment_t*>(m_pRoadSegments + roadOffset);
+        m_pLog->debug("Got road {} with {} points", pRoad->id, pRoad->size);
+        roads.push_back(pRoad);
+    }
+    return roads;
+}
+
+static RoadData::cdegree_t cdegree(float degree) {
+    return static_cast<RoadData::cdegree_t>(degree * 100);
+}
+
+RoadData::tile_t* RoadData::GetTile(float lat, float lon) {
+    key_t clatclon = GetKey(cdegree(lat), cdegree(lon));
+
+    offset_t tileOffset = m_Grid[clatclon];
+    tile_t* pTile = reinterpret_cast<tile_t*>(m_pTiles + tileOffset);
+    assert(pTile->clatclon == clatclon);
+    m_pLog->debug("Got tile [{}] at offset {} with {} roads", clatclon, tileOffset, pTile->size);
+    return pTile;
+}
+
+RoadData::key_t RoadData::GetKey(cdegree_t clat, cdegree_t clon) {
     uint32_t lat = ((uint32_t)clat) << 16;
     uint32_t lon = ((uint32_t)clon & 0x0000ffff);
     key_t key = lat | lon;
@@ -98,8 +125,8 @@ RoadData::offset_t RoadData::AddRoadSegment(rsid_t rsid, const GenericArray<true
     for (const Value& latlon : points) {
         float lat = latlon[0].GetFloat();
         float lon = latlon[1].GetFloat();
-        m_pRoadSegments[m_RoadSegmentOffset++] = lat;
-        m_pRoadSegments[m_RoadSegmentOffset++] = lon;
+        reinterpret_cast<float*>(m_pRoadSegments)[m_RoadSegmentOffset++] = lat;
+        reinterpret_cast<float*>(m_pRoadSegments)[m_RoadSegmentOffset++] = lon;
     }
 
     return offset;
