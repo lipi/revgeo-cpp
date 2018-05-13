@@ -13,12 +13,14 @@ int main() {
 
     RoadData roadData(DB_FILE, 100);
 
-    for (RoadData::roadsegment_t* pRoad : roadData.GetRoadsegments(48.06, -124.00)) {
+    for (RoadData::RoadSegment* pRoad : roadData.GetRoadSegments(48.06, -124.00)) {
         for (int i = 0; i < pRoad->size; i++) {
             printf("[%f,%f] ",pRoad->points[i].lat, pRoad->points[i].lon);
         }
         printf("\n");
     }
+
+    // busy loop to allow seeing memory use of process
     while (true) {}
 
     return 0;

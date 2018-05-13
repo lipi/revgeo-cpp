@@ -26,7 +26,6 @@ RoadData::RoadData(std::string dbFileName, size_t limit) :
     LoadTiles(limit);
 }
 
-
 RoadData::~RoadData() {
     if (m_pTiles) {
         free(m_pTiles);
@@ -35,6 +34,7 @@ RoadData::~RoadData() {
         free(m_pRoadSegments);
     }
 }
+
 void RoadData::LoadTiles(size_t limit) {
 
     m_pLog->info("Loading tiles...");
@@ -67,29 +67,29 @@ void RoadData::LoadTiles(size_t limit) {
     m_pLog->info("Loaded {} tiles", m_Grid.size());
 }
 
-std::vector<RoadData::roadsegment_t*> RoadData::GetRoadsegments(float lat, float lon) {
-    std::vector<roadsegment_t*> roads;
+std::vector<RoadData::RoadSegment*> RoadData::GetRoadSegments(float lat, float lon) {
+    std::vector<RoadSegment*> roads;
 
-    tile_t* pTile = GetTile(lat, lon);
+    Tile* pTile = GetTile(lat, lon);
 
     for (int i = 0; i < pTile->size; i++) {
         offset_t roadOffset = pTile->offsets[i];
-        roadsegment_t* pRoad = reinterpret_cast<roadsegment_t*>(m_pRoadSegments + roadOffset);
+        RoadSegment* pRoad = reinterpret_cast<RoadSegment*>(m_pRoadSegments + roadOffset);
         m_pLog->debug("Got road {} with {} points", pRoad->id, pRoad->size);
         roads.push_back(pRoad);
     }
     return roads;
 }
 
-static RoadData::cdegree_t cdegree(float degree) {
+RoadData::cdegree_t RoadData::CDegree(float degree) {
     return static_cast<RoadData::cdegree_t>(degree * 100);
 }
 
-RoadData::tile_t* RoadData::GetTile(float lat, float lon) {
-    key_t clatclon = GetKey(cdegree(lat), cdegree(lon));
+RoadData::Tile* RoadData::GetTile(float lat, float lon) {
+    key_t clatclon = GetKey(CDegree(lat), CDegree(lon));
 
     offset_t tileOffset = m_Grid[clatclon];
-    tile_t* pTile = reinterpret_cast<tile_t*>(m_pTiles + tileOffset);
+    Tile* pTile = reinterpret_cast<Tile*>(m_pTiles + tileOffset);
     assert(pTile->clatclon == clatclon);
     m_pLog->debug("Got tile [{}] at offset {} with {} roads", clatclon, tileOffset, pTile->size);
     return pTile;
@@ -99,12 +99,11 @@ RoadData::key_t RoadData::GetKey(cdegree_t clat, cdegree_t clon) {
     uint32_t lat = ((uint32_t)clat) << 16;
     uint32_t lon = ((uint32_t)clon & 0x0000ffff);
     key_t key = lat | lon;
-//    printf("%d %d %u %u %08x\n", clat, clon, lat, lon, key);
     return key;
 }
 
 RoadData::offset_t RoadData::AddRoadSegment(rsid_t rsid, const GenericArray<true, Value>& points ) {
-    // TODO: check if geometry exists
+    // TODO: check if roadsegment exists (by looking it up in a map)
 
     m_pLog->debug("adding road segment {}", rsid);
 
