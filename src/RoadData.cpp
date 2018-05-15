@@ -71,6 +71,9 @@ std::vector<RoadData::RoadSegment*> RoadData::GetRoadSegments(float lat, float l
     std::vector<RoadSegment*> roads;
 
     Tile* pTile = GetTile(lat, lon);
+    if (nullptr == pTile) {
+        return roads;
+    }
 
     for (int i = 0; i < pTile->size; i++) {
         offset_t roadOffset = pTile->offsets[i];
@@ -94,8 +97,12 @@ RoadData::Tile* RoadData::GetTile(float lat, float lon) {
     Tile* pTile = reinterpret_cast<Tile*>(m_pTiles + tileOffset);
     assert(pTile);
     m_pLog->debug("Got tile [{}] ({}|{}) at offset {} with {} roads", clatclon, clat, clon, tileOffset, pTile->size);
-    assert(pTile->clatclon == clatclon);
-    return pTile;
+    if (pTile->clatclon == clatclon) {
+        return pTile;
+    }
+    else {
+        return nullptr;
+    }
 }
 
 RoadData::key_t RoadData::GetKey(cdegree_t clat, cdegree_t clon) {

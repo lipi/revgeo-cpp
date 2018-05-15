@@ -58,8 +58,8 @@ SimpleMatcher::SimpleMatcher(RoadData& roadData) :
 
 std::pair<RoadData::rsid_t, double> SimpleMatcher::Lookup(float lat, float lon) {
     const std::vector<RoadData::RoadSegment*> roads = m_RoadData.GetRoadSegments(lat + 0.01, lon - 0.01);
-    double dMin = 0; // note: will hold squared distance
-    RoadData::rsid_t rsid;
+    double dMin = 0.0; // note: will hold squared distance
+    RoadData::rsid_t rsid = 0;
     RoadData::Point point {lon, lat};
     for (auto* pRoad : roads) {
         for (int i = 0; i < pRoad->size - 1; i++) {
