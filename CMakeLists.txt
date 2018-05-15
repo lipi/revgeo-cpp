@@ -13,7 +13,7 @@ INCLUDE_DIRECTORIES(
         ${CMAKE_CURRENT_LIST_DIR}/thirdparty/spdlog/include
         ${CMAKE_CURRENT_LIST_DIR}/thirdparty/rapidjson/include
         ${CMAKE_CURRENT_LIST_DIR}/thirdparty/SQLiteCpp/include )
-set(SOURCE_FILES src/main.cpp src/RoadData.cpp src/RoadData.h src/platform.h)
+set(SOURCE_FILES src/main.cpp src/RoadData.cpp src/RoadData.h src/platform.h src/SimpleMatcher.cpp src/SimpleMatcher.h)
 add_executable(road_segment_cpp ${SOURCE_FILES})
 
 target_link_libraries(road_segment_cpp

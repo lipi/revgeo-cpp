@@ -17,9 +17,11 @@ public:
     typedef uint32_t rsid_t;
     typedef uint32_t length_t;
 
+    // TODO: constructor, to use latlon for consistency
+    // (user shouldn't need to know about implementation detail)
     struct Point {
+        float lon; // geoJSON uses lon-lat order, array layout follows that
         float lat;
-        float lon;
     };
 
     struct RoadSegment {
@@ -45,9 +47,9 @@ private:
     };
 
     void LoadTiles(size_t limit = 0);
-    key_t GetKey(cdegree_t clat, cdegree_t clon);
     offset_t AddTile(key_t clatclon, offset_t* pOffsets, size_t num);
     offset_t AddRoadSegment(rsid_t rsid, const GenericArray<true, Value>& points );
+    key_t GetKey(cdegree_t clat, cdegree_t clon);
     Tile* GetTile(float lat, float lon);
     cdegree_t CDegree(float degree);
 

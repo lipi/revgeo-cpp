@@ -86,12 +86,15 @@ RoadData::cdegree_t RoadData::CDegree(float degree) {
 }
 
 RoadData::Tile* RoadData::GetTile(float lat, float lon) {
-    key_t clatclon = GetKey(CDegree(lat), CDegree(lon));
+    cdegree_t clat = CDegree(lat);
+    cdegree_t clon = CDegree(lon);
+    key_t clatclon = GetKey(clat, clon);
 
     offset_t tileOffset = m_Grid[clatclon];
     Tile* pTile = reinterpret_cast<Tile*>(m_pTiles + tileOffset);
+    assert(pTile);
+    m_pLog->debug("Got tile [{}] ({}|{}) at offset {} with {} roads", clatclon, clat, clon, tileOffset, pTile->size);
     assert(pTile->clatclon == clatclon);
-    m_pLog->debug("Got tile [{}] at offset {} with {} roads", clatclon, tileOffset, pTile->size);
     return pTile;
 }
 

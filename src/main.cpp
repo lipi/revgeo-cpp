@@ -4,6 +4,7 @@
 #include "spdlog/fmt/ostr.h"
 
 #include "RoadData.h"
+#include "SimpleMatcher.h"
 
 static const char* DB_FILE = "tiles.sqlite";
 
@@ -19,6 +20,11 @@ int main() {
         }
         printf("\n");
     }
+
+
+    SimpleMatcher matcher(roadData);
+    std::pair<RoadData::rsid_t, double> result = matcher.Lookup(48.055F, -123.995F);
+    printf("Closest road: %d distance:%.2f meters\n", result.first, result.second);
 
     // busy loop to allow seeing memory use of process
     while (true) {}
