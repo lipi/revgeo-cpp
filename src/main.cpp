@@ -20,9 +20,14 @@ int main(int argc, char* argv[]) {
     }
 
     auto console = spdlog::stdout_color_mt("console");
-    spdlog::set_level(spdlog::level::info);
 
+#if 0
+    spdlog::set_level(spdlog::level::debug);
+    RoadData roadData(DB_FILE, 100);
+#else
+    spdlog::set_level(spdlog::level::info);
     RoadData roadData(DB_FILE);
+#endif
 
     for (RoadData::RoadSegment* pRoad : roadData.GetRoadSegments(48.06f, -124.00f)) {
         for (int i = 0; i < pRoad->size; i++) {

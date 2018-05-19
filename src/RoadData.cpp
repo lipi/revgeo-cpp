@@ -7,7 +7,8 @@ static const constexpr float INC_FACTOR = 1.25;
 
 RoadData::RoadData(std::string dbFileName, size_t limit) :
         m_TileSize(1000),
-        m_RoadSegmentSize(1000)
+        m_RoadSegmentSize(1000),
+        m_AllowDuplicateRsids(false)
 {
     m_pLog = spdlog::get("console");
 
@@ -51,10 +52,20 @@ void RoadData::LoadTiles(size_t limit) {
         std::vector<offset_t> offsets;
         for (const Value& f : d["features"].GetArray()) {
             int roadSegmentId = f["properties"]["road_segment_id"].GetInt();
-            const auto& coordinates = f["geometry"]["coordinates"].GetArray();
+            if (!m_AllowDuplicateRsids && 1 == m_Rsids.count(roadSegmentId)) {
+                // refer to existing road segment
+                uint32_t geometryOffset = m_Rsids[roadSegmentId];
+                offsets.push_back(geometryOffset);
+                m_pLog->debug("Using existing road segment ID {} at {}", roadSegmentId, geometryOffset);
+            }
+            else {
+                // add new road segment
+                const auto &coordinates = f["geometry"]["coordinates"].GetArray();
 
-            uint32_t geometryOffset = AddRoadSegment(roadSegmentId, coordinates);
-            offsets.push_back(geometryOffset);
+                uint32_t geometryOffset = AddRoadSegment(roadSegmentId, coordinates);
+                offsets.push_back(geometryOffset);
+                m_Rsids[roadSegmentId] = geometryOffset;
+            }
         }
 
         cdegree_t clat = query.getColumn(0);

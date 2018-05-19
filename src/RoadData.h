@@ -56,12 +56,14 @@ private:
     std::unique_ptr<SQLite::Database> m_pDb;
     std::shared_ptr<spdlog::logger> m_pLog;
     std::unordered_map<key_t, offset_t> m_Grid;
+    std::unordered_map<rsid_t, offset_t> m_Rsids;
     uint32_t* m_pTiles;
     offset_t m_TileSize;
     offset_t m_TileOffset;
     uint32_t* m_pRoadSegments;
     offset_t m_RoadSegmentSize;
     offset_t m_RoadSegmentOffset;
+    bool m_AllowDuplicateRsids;
 };
 
 #endif //ROAD_SEGMENT_CPP_ROADDATA_H
