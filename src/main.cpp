@@ -10,6 +10,8 @@
 #include "RoadData.h"
 #include "SimpleMatcher.h"
 
+//#define DEBUG 1
+
 static const char* DB_FILE = "tiles.sqlite";
 
 int main(int argc, char* argv[]) {
@@ -21,7 +23,7 @@ int main(int argc, char* argv[]) {
 
     auto console = spdlog::stdout_color_mt("console");
 
-#if 0
+#ifdef DEBUG
     spdlog::set_level(spdlog::level::debug);
     RoadData roadData(DB_FILE, 100);
 #else
@@ -35,6 +37,8 @@ int main(int argc, char* argv[]) {
         }
         printf("\n");
     }
+
+    roadData.SaveBinary("roaddata.sqlite");
 
     spdlog::get("console")->info("Reading CSV file {} ...", argv[1]);
     std::ifstream data(argv[1]);
@@ -67,7 +71,9 @@ int main(int argc, char* argv[]) {
     }
     console->info("Done, {} roads matched", hits);
 
+#ifndef DEBUG
     while (true) {}
+#endif
 
     return 0;
 }

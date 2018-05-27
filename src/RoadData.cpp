@@ -1,4 +1,5 @@
 
+#include <iostream>
 #include "platform.h"
 
 #include "RoadData.h"
@@ -27,6 +28,83 @@ RoadData::RoadData(std::string dbFileName, size_t limit) :
     LoadTiles(limit);
 }
 
+void RoadData::SaveRoadSegments(SQLite::Database& db) {
+    db.exec("DROP TABLE IF EXISTS blob");
+    db.exec("CREATE TABLE blob (id INTEGER PRIMARY KEY, key TEXT, value BLOB)");
+    SQLite::Statement query(db, "INSERT INTO blob VALUES (NULL, ?, ?)");
+
+    m_pLog->info("Saving road segments...");
+    query.bind(1, "roadsegments");
+    int size = m_RoadSegmentSize * sizeof(offset_t);
+    query.bindNoCopy(2, m_pRoadSegments, size);
+    int result = query.exec();
+    m_pLog->info("Saved road segments ({} bytes, result:{})", size, result);
+
+    m_pLog->info("Saving tiles...");
+    try {
+        query.reset();
+        query.clearBindings();
+    }
+    catch (std::exception& e) {
+        std::cout << "Exception: " << e.what() << "\n";
+        return;
+    }
+    query.bind(1, "tiles");
+    size = m_TileSize * sizeof(offset_t);
+    query.bindNoCopy(2, m_pTiles, size);
+    result = query.exec();
+    m_pLog->info("Saved tiles ({} bytes, result:{})", size, result);
+}
+
+void RoadData::SaveRoadSegmentIds(SQLite::Database& db) {
+    m_pLog->info("Saving road segment IDs...");
+    db.exec("DROP TABLE IF EXISTS road_segment_offset");
+    db.exec("CREATE TABLE road_segment_offset (rsid INTEGER PRIMARY KEY, offset INTEGER)");
+    SQLite::Statement query(db, "INSERT INTO road_segment_offset VALUES(?, ?)");
+    for (const auto& elem : m_Rsids) {
+        try {
+            query.reset();
+            query.bind(1, elem.first);
+            query.bind(2, elem.second);
+            query.exec();
+        }
+        catch (std::exception& e) {
+            std::cout << "Exception: " << e.what() << "\n";
+            return;
+        }
+
+    }
+    m_pLog->info("Saved {} road segment IDs", m_Rsids.size());
+}
+
+void RoadData::SaveGrid(SQLite::Database& db) {
+    m_pLog->info("Saving grid...");
+    db.exec("DROP TABLE IF EXISTS grid");
+    db.exec("CREATE TABLE grid (clatclon INTEGER PRIMARY KEY, offset INTEGER)");
+    SQLite::Statement query(db, "INSERT INTO grid VALUES(?, ?)");
+    for (const auto& elem : m_Rsids) {
+        try {
+            query.reset();
+            query.bind(1, elem.first);
+            query.bind(2, elem.second);
+            query.exec();
+        }
+        catch (std::exception& e) {
+            std::cout << "Exception: " << e.what() << "\n";
+            return;
+        }
+
+    }
+    m_pLog->info("Saved grid with {} tiles", m_Grid.size());
+}
+
+void RoadData::SaveBinary(std::string filename) {
+    SQLite::Database db(filename, SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
+    SaveRoadSegments(db);
+    SaveRoadSegmentIds(db);
+    SaveGrid(db);
+}
+
 RoadData::~RoadData() {
     if (m_pTiles) {
         free(m_pTiles);
@@ -47,11 +125,11 @@ void RoadData::LoadTiles(size_t limit) {
     {
         std::string tileData = query.getColumn(2);
 
-        Document d; // TODO: use SOX parsing to speed it up
-        d.Parse(tileData.c_str());
+        Document doc; // TODO: use SOX parsing to speed it up
+        doc.Parse(tileData.c_str());
         std::vector<offset_t> offsets;
-        for (const Value& f : d["features"].GetArray()) {
-            int roadSegmentId = f["properties"]["road_segment_id"].GetInt();
+        for (const Value& feature: doc["features"].GetArray()) {
+            rsid_t roadSegmentId = feature["properties"]["road_segment_id"].GetInt();
             if (!m_AllowDuplicateRsids && 1 == m_Rsids.count(roadSegmentId)) {
                 // refer to existing road segment
                 uint32_t geometryOffset = m_Rsids[roadSegmentId];
@@ -60,7 +138,7 @@ void RoadData::LoadTiles(size_t limit) {
             }
             else {
                 // add new road segment
-                const auto &coordinates = f["geometry"]["coordinates"].GetArray();
+                const auto &coordinates = feature["geometry"]["coordinates"].GetArray();
 
                 uint32_t geometryOffset = AddRoadSegment(roadSegmentId, coordinates);
                 offsets.push_back(geometryOffset);
@@ -88,7 +166,7 @@ std::vector<RoadData::RoadSegment*> RoadData::GetRoadSegments(float lat, float l
 
     for (int i = 0; i < pTile->size; i++) {
         offset_t roadOffset = pTile->offsets[i];
-        RoadSegment* pRoad = reinterpret_cast<RoadSegment*>(m_pRoadSegments + roadOffset);
+        auto* pRoad = reinterpret_cast<RoadSegment*>(m_pRoadSegments + roadOffset);
         m_pLog->debug("Got road {} with {} points", pRoad->id, pRoad->size);
         roads.push_back(pRoad);
     }
@@ -105,7 +183,7 @@ RoadData::Tile* RoadData::GetTile(float lat, float lon) {
     key_t clatclon = GetKey(clat, clon);
 
     offset_t tileOffset = m_Grid[clatclon];
-    Tile* pTile = reinterpret_cast<Tile*>(m_pTiles + tileOffset);
+    auto* pTile = reinterpret_cast<Tile*>(m_pTiles + tileOffset);
     assert(pTile);
     m_pLog->debug("Got tile [{}] ({}|{}) at offset {} with {} roads", clatclon, clat, clon, tileOffset, pTile->size);
     if (pTile->clatclon == clatclon) {
@@ -117,8 +195,8 @@ RoadData::Tile* RoadData::GetTile(float lat, float lon) {
 }
 
 RoadData::key_t RoadData::GetKey(cdegree_t clat, cdegree_t clon) {
-    uint32_t lat = ((uint32_t)clat) << 16;
-    uint32_t lon = ((uint32_t)clon & 0x0000ffff);
+    uint32_t lat = ((uint32_t)clat) << 16U;
+    uint32_t lon = ((uint32_t)clon & 0x0000ffffU);
     key_t key = lat | lon;
     return key;
 }
@@ -132,7 +210,7 @@ RoadData::offset_t RoadData::AddRoadSegment(rsid_t rsid, const GenericArray<true
     while (m_RoadSegmentSize <  m_RoadSegmentOffset + sizeIncrement) {
         m_pLog->info("road segments size {}, reallocating to {}",
                       m_RoadSegmentSize, (size_t)(m_RoadSegmentSize * INC_FACTOR));
-        m_RoadSegmentSize = m_RoadSegmentSize * INC_FACTOR;
+        m_RoadSegmentSize = static_cast<offset_t >(m_RoadSegmentSize * INC_FACTOR);
         m_pRoadSegments = (uint32_t*)realloc(m_pRoadSegments, m_RoadSegmentSize * sizeof(uint32_t));
         assert(nullptr != m_pRoadSegments);
     }
@@ -152,14 +230,14 @@ RoadData::offset_t RoadData::AddRoadSegment(rsid_t rsid, const GenericArray<true
     return offset;
 }
 
-RoadData::offset_t RoadData::AddTile(key_t clatclon, offset_t* pOffsets, size_t num) {
+RoadData::offset_t RoadData::AddTile(key_t clatclon, offset_t* pOffsets, offset_t num) {
 
     m_pLog->debug("adding tile {}", clatclon);
-    size_t sizeIncrement = 2 + num;
+    offset_t sizeIncrement = 2 + num;
     while (m_TileSize < m_TileOffset + sizeIncrement) {
         m_pLog->info("tiles size {}, reallocating to {}",
                       m_TileSize, (size_t)(m_TileSize * INC_FACTOR));
-        m_TileSize = m_TileSize * INC_FACTOR;
+        m_TileSize = static_cast<offset_t>(m_TileSize * INC_FACTOR);
         m_pTiles = (uint32_t*)realloc(m_pTiles, m_TileSize * sizeof(uint32_t));
         assert(nullptr != m_pTiles);
     }
