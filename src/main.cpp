@@ -12,12 +12,10 @@
 
 //#define DEBUG 1
 
-static const char* DB_FILE = "tiles.sqlite";
-
 int main(int argc, char* argv[]) {
 
-    if ( argc < 2 ) {
-        fprintf(stderr, "Usage: %s <latlon.csv>\n", argv[0]);
+    if ( argc < 3 ) {
+        fprintf(stderr, "Usage: %s <dbfile|binaryfile> <latlon.csv>\n", argv[0]);
         return 1;
     }
 
@@ -25,11 +23,7 @@ int main(int argc, char* argv[]) {
 
 #ifdef DEBUG
     spdlog::set_level(spdlog::level::debug);
-    RoadData roadData(DB_FILE, 100);
-#else
-    spdlog::set_level(spdlog::level::info);
-    RoadData roadData(DB_FILE);
-#endif
+    RoadData roadData(argv[1], 100);
 
     for (RoadData::RoadSegment* pRoad : roadData.GetRoadSegments(48.06f, -124.00f)) {
         for (int i = 0; i < pRoad->size; i++) {
@@ -37,11 +31,13 @@ int main(int argc, char* argv[]) {
         }
         printf("\n");
     }
+#else
+    spdlog::set_level(spdlog::level::info);
+    RoadData roadData(argv[1]);
+#endif
 
-    roadData.SaveBinary("roaddata.sqlite");
-
-    spdlog::get("console")->info("Reading CSV file {} ...", argv[1]);
-    std::ifstream data(argv[1]);
+    spdlog::get("console")->info("Reading CSV file {} ...", argv[2]);
+    std::ifstream data(argv[2]);
     std::string line;
     std::vector<RoadData::Point> testPoints;
     float lat, lon;
@@ -70,10 +66,6 @@ int main(int argc, char* argv[]) {
         console->debug("road segment ID: {} distance: {}",  result.first, result.second);
     }
     console->info("Done, {} roads matched", hits);
-
-#ifndef DEBUG
-    while (true) {}
-#endif
 
     return 0;
 }

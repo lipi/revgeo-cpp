@@ -7,28 +7,60 @@
 
 static const constexpr float INC_FACTOR = 1.25;
 
-RoadData::RoadData(std::string dbFileName, size_t limit) :
+RoadData::RoadData(std::string filename, size_t limit) :
         m_TileSize(1000),
         m_RoadSegmentSize(1000),
         m_AllowDuplicateRsids(false)
 {
     m_pLog = spdlog::get("console");
 
-    m_pLog->info("Opening DB...");
-    try {
-        m_pDb = std::make_unique<SQLite::Database>(dbFileName);
+    if (!LoadBinary(filename)) {
+        if (LoadTilesFromDb(filename, limit)) {
+            SaveBinary("roaddata");
+        }
     }
-    catch (const SQLite::Exception& ex) {
-        fprintf(stderr, "%s : %s\n", dbFileName.c_str(), ex.what());
-        return;
-    }
-
-    m_pTiles = (uint32_t*)malloc(m_TileSize * sizeof(uint32_t));
-    m_pRoadSegments = (uint32_t *)malloc(m_RoadSegmentSize * sizeof(uint32_t));
-
-    LoadTiles(limit);
 }
 
+int RoadData::LoadBlob(const std::string& filename, uint32_t*& pData) {
+    int size = 0;
+    std::ifstream stream(filename);
+    if (stream) {
+        stream.seekg (0, stream.end);
+        int length = stream.tellg();
+        stream.seekg (0, stream.beg);
+
+        pData = (uint32_t*)malloc(length);
+        if (pData) {
+            stream.read(reinterpret_cast<char*>(pData), length);
+            if (stream.gcount() == length) {
+                size = length;
+                m_pLog->info("Loaded {} bytes from {}", stream.gcount(), filename);
+            }
+            else {
+                m_pLog->error("Read {} bytes instead of {}", stream.gcount(), length);
+                size = -1;
+            }
+        }
+        else {
+            m_pLog->error("Could not allocate {} bytes for data in {}", length, filename);
+        }
+    }
+    else {
+        // not an error if file does not exist
+        m_pLog->info("Couldn't open {}", filename);
+    }
+    return size;
+}
+
+bool RoadData::LoadBinary(std::string basename) {
+    m_pLog->info("Loading binary data...");
+    int segmentBytes = LoadBlob(basename + ".segments", m_pRoadSegments);
+    int tileBytes = LoadBlob(basename + ".tiles", m_pTiles);
+    int rsidBytes = LoadRoadSegmentIds(basename + ".rsid");
+    int gridBytes = LoadGrid(basename + ".grid");
+
+    return (tileBytes > 0 && segmentBytes > 0 && rsidBytes > 0 && gridBytes > 0);
+}
 
 void RoadData::SaveBlob(void* pData, int size, std::string filename) {
     m_pLog->info("Saving binary data '{}'...", filename);
@@ -38,18 +70,47 @@ void RoadData::SaveBlob(void* pData, int size, std::string filename) {
     m_pLog->info("Saved {} bytes", size);
 
 }
-void RoadData::SaveRoadSegments() {
-    SaveBlob(m_pRoadSegments, m_RoadSegmentOffset * sizeof(offset_t), "road_segments.bin");
+
+void RoadData::SaveRoadSegments(std::string basename) {
+    SaveBlob(m_pRoadSegments, m_RoadSegmentOffset * sizeof(offset_t), basename + ".segments");
 }
 
-void RoadData::SaveTiles() {
-    SaveBlob(m_pTiles, m_TileOffset * sizeof(offset_t), "tiles.bin");
+void RoadData::SaveTiles(std::string basename) {
+    SaveBlob(m_pTiles, m_TileOffset * sizeof(offset_t), basename + ".tiles");
 }
 
-void RoadData::SaveRoadSegmentIds() {
+int RoadData::LoadRoadSegmentIds(const std::string& filename) {
+    std::ios_base::openmode mode = std::ios_base::in | std::ios_base::binary;
+    std::ifstream stream(filename, mode);
+    int length = 0;
+    if (stream) {
+        while (stream.good()) {
+            rsid_t rsid;
+            offset_t offset;
+            stream.read(reinterpret_cast<char*>(&rsid), sizeof(rsid));
+            stream.read(reinterpret_cast<char*>(&offset), sizeof(offset));
+            m_Rsids[rsid] = offset;
+            length += sizeof(rsid) + sizeof(offset);
+        }
+        if (stream.eof()) {
+            m_pLog->info("Read {} bytes ({} entries) from {}",
+                         length, length/(sizeof(rsid_t) + sizeof(offset_t)), filename);
+        }
+        else {
+            m_pLog->error("Failed to read rsids: got {} bytes", length);
+            length = -1;
+        }
+    }
+    else {
+        m_pLog->info("Couldn't open {}", filename);
+    }
+    return length;
+}
+
+void RoadData::SaveRoadSegmentIds(std::string basename) {
     m_pLog->info("Saving road segment IDs...");
     std::ios_base::openmode mode = std::ios_base::out | std::ios_base::binary | std::ios_base::trunc;
-    std::ofstream rsidStream("road_segment_ids.bin", mode);
+    std::ofstream rsidStream(basename + ".rsid", mode);
 
     for (const auto& elem : m_Rsids) {
         rsidStream.write(reinterpret_cast<const char*>(&elem.first), 4);
@@ -58,10 +119,39 @@ void RoadData::SaveRoadSegmentIds() {
     m_pLog->info("Saved {} road segment IDs", m_Rsids.size());
 }
 
-void RoadData::SaveGrid() {
+int RoadData::LoadGrid(const std::string& filename) {
+    std::ios_base::openmode mode = std::ios_base::in | std::ios_base::binary;
+    std::ifstream stream(filename, mode);
+    int length = 0;
+    if (stream) {
+        while (stream.good()) {
+            key_t key;
+            offset_t offset;
+            stream.read(reinterpret_cast<char*>(&key), sizeof(key));
+            stream.read(reinterpret_cast<char*>(&offset), sizeof(offset));
+            m_Grid[key] = offset;
+            length += sizeof(key) + sizeof(offset);
+        }
+        if (stream.eof()) {
+            m_pLog->info("Read {} bytes ({} entries) from {}",
+                         length, length / (sizeof(key_t) + sizeof(offset_t)), filename);
+        }
+        else {
+            m_pLog->error("Failed to read grid: got {} bytes", length);
+            length = -1;
+        }
+    }
+    else {
+        m_pLog->info("Couldn't open {}", filename);
+    }
+
+    return length;
+}
+
+void RoadData::SaveGrid(std::string basename) {
     m_pLog->info("Saving grid...");
     std::ios_base::openmode mode = std::ios_base::out | std::ios_base::binary | std::ios_base::trunc;
-    std::ofstream gridStream("grid.bin", mode);
+    std::ofstream gridStream(basename + ".grid", mode);
     for (const auto& elem : m_Grid) {
         gridStream.write(reinterpret_cast<const char*>(&elem.first), 4);
         gridStream.write(reinterpret_cast<const char*>(&elem.second), 4);
@@ -70,10 +160,10 @@ void RoadData::SaveGrid() {
 }
 
 void RoadData::SaveBinary(std::string filename) {
-    SaveRoadSegments();
-    SaveRoadSegmentIds();
-    SaveTiles();
-    SaveGrid();
+    SaveRoadSegments(filename);
+    SaveRoadSegmentIds(filename);
+    SaveTiles(filename);
+    SaveGrid(filename);
 }
 
 RoadData::~RoadData() {
@@ -83,9 +173,22 @@ RoadData::~RoadData() {
     if (m_pRoadSegments) {
         free(m_pRoadSegments);
     }
+    m_pLog->info("RoadData destroyed");
 }
 
-void RoadData::LoadTiles(size_t limit) {
+bool RoadData::LoadTilesFromDb(std::string dbFileName, size_t limit) {
+    bool loaded = false;
+
+    m_pLog->info("Opening DB...");
+    try {
+        m_pDb = std::make_unique<SQLite::Database>(dbFileName);
+    }
+    catch (const SQLite::Exception& ex) {
+        m_pLog->error( "{} : {}", dbFileName, ex.what());
+        return loaded;
+    }
+    m_pTiles = (uint32_t*)malloc(m_TileSize * sizeof(uint32_t));
+    m_pRoadSegments = (uint32_t *)malloc(m_RoadSegmentSize * sizeof(uint32_t));
 
     m_pLog->info("Loading tiles...");
 
@@ -125,6 +228,8 @@ void RoadData::LoadTiles(size_t limit) {
         m_Grid.insert(std::make_pair(key, tileOffset));
     }
     m_pLog->info("Loaded {} tiles", m_Grid.size());
+    loaded = m_Grid.size() > 0;
+    return loaded;
 }
 
 std::vector<RoadData::RoadSegment*> RoadData::GetRoadSegments(float lat, float lon) {

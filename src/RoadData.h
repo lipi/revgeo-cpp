@@ -33,8 +33,6 @@ public:
     explicit RoadData(std::string dbFileName, size_t limit = 0);
     ~RoadData();
     std::vector<RoadSegment*> GetRoadSegments(float lat, float lon);
-    void SaveBinary(std::string filename);
-    void LoadBinary(std::string filename);
 
 private:
 
@@ -48,18 +46,27 @@ private:
         offset_t offsets[1];
     };
 
-    void LoadTiles(size_t limit = 0);
+    bool LoadTilesFromDb(std::string dbFileName, size_t limit = 0);
     offset_t AddTile(key_t clatclon, offset_t* pOffsets, offset_t num);
     offset_t AddRoadSegment(rsid_t rsid, const GenericArray<true, Value>& points );
     key_t GetKey(cdegree_t clat, cdegree_t clon);
     Tile* GetTile(float lat, float lon);
     cdegree_t CDegree(float degree);
 
+    void SaveBinary(std::string filename);
+    bool LoadBinary(std::string filename);
+
+    int LoadBlob(const std::string& filename, uint32_t*& pData);
     void SaveBlob(void* pData, int size, std::string filename);
-    void SaveRoadSegments();
-    void SaveRoadSegmentIds();
-    void SaveTiles();
-    void SaveGrid();
+
+    void SaveRoadSegments(std::string basename);
+    void SaveTiles(std::string basename);
+
+    int LoadRoadSegmentIds(const std::string& filename);
+    void SaveRoadSegmentIds(std::string basename);
+
+    int LoadGrid(const std::string& filename);
+    void SaveGrid(std::string basename);
 
     std::unique_ptr<SQLite::Database> m_pDb;
     std::shared_ptr<spdlog::logger> m_pLog;
