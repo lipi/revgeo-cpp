@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include <fstream>
 #include "platform.h"
 
 #include "RoadData.h"
@@ -28,81 +29,51 @@ RoadData::RoadData(std::string dbFileName, size_t limit) :
     LoadTiles(limit);
 }
 
-void RoadData::SaveRoadSegments(SQLite::Database& db) {
-    db.exec("DROP TABLE IF EXISTS blob");
-    db.exec("CREATE TABLE blob (id INTEGER PRIMARY KEY, key TEXT, value BLOB)");
-    SQLite::Statement query(db, "INSERT INTO blob VALUES (NULL, ?, ?)");
 
-    m_pLog->info("Saving road segments...");
-    query.bind(1, "roadsegments");
-    int size = m_RoadSegmentSize * sizeof(offset_t);
-    query.bindNoCopy(2, m_pRoadSegments, size);
-    int result = query.exec();
-    m_pLog->info("Saved road segments ({} bytes, result:{})", size, result);
+void RoadData::SaveBlob(void* pData, int size, std::string filename) {
+    m_pLog->info("Saving binary data '{}'...", filename);
+    std::ios_base::openmode mode = std::ios_base::out | std::ios_base::binary | std::ios_base::trunc;
+    std::ofstream stream(filename, mode);
+    stream.write(reinterpret_cast<char*>(pData), size);
+    m_pLog->info("Saved {} bytes", size);
 
-    m_pLog->info("Saving tiles...");
-    try {
-        query.reset();
-        query.clearBindings();
-    }
-    catch (std::exception& e) {
-        std::cout << "Exception: " << e.what() << "\n";
-        return;
-    }
-    query.bind(1, "tiles");
-    size = m_TileSize * sizeof(offset_t);
-    query.bindNoCopy(2, m_pTiles, size);
-    result = query.exec();
-    m_pLog->info("Saved tiles ({} bytes, result:{})", size, result);
+}
+void RoadData::SaveRoadSegments() {
+    SaveBlob(m_pRoadSegments, m_RoadSegmentOffset * sizeof(offset_t), "road_segments.bin");
 }
 
-void RoadData::SaveRoadSegmentIds(SQLite::Database& db) {
-    m_pLog->info("Saving road segment IDs...");
-    db.exec("DROP TABLE IF EXISTS road_segment_offset");
-    db.exec("CREATE TABLE road_segment_offset (rsid INTEGER PRIMARY KEY, offset INTEGER)");
-    SQLite::Statement query(db, "INSERT INTO road_segment_offset VALUES(?, ?)");
-    for (const auto& elem : m_Rsids) {
-        try {
-            query.reset();
-            query.bind(1, elem.first);
-            query.bind(2, elem.second);
-            query.exec();
-        }
-        catch (std::exception& e) {
-            std::cout << "Exception: " << e.what() << "\n";
-            return;
-        }
+void RoadData::SaveTiles() {
+    SaveBlob(m_pTiles, m_TileOffset * sizeof(offset_t), "tiles.bin");
+}
 
+void RoadData::SaveRoadSegmentIds() {
+    m_pLog->info("Saving road segment IDs...");
+    std::ios_base::openmode mode = std::ios_base::out | std::ios_base::binary | std::ios_base::trunc;
+    std::ofstream rsidStream("road_segment_ids.bin", mode);
+
+    for (const auto& elem : m_Rsids) {
+        rsidStream.write(reinterpret_cast<const char*>(&elem.first), 4);
+        rsidStream.write(reinterpret_cast<const char*>(&elem.second), 4);
     }
     m_pLog->info("Saved {} road segment IDs", m_Rsids.size());
 }
 
-void RoadData::SaveGrid(SQLite::Database& db) {
+void RoadData::SaveGrid() {
     m_pLog->info("Saving grid...");
-    db.exec("DROP TABLE IF EXISTS grid");
-    db.exec("CREATE TABLE grid (clatclon INTEGER PRIMARY KEY, offset INTEGER)");
-    SQLite::Statement query(db, "INSERT INTO grid VALUES(?, ?)");
-    for (const auto& elem : m_Rsids) {
-        try {
-            query.reset();
-            query.bind(1, elem.first);
-            query.bind(2, elem.second);
-            query.exec();
-        }
-        catch (std::exception& e) {
-            std::cout << "Exception: " << e.what() << "\n";
-            return;
-        }
-
+    std::ios_base::openmode mode = std::ios_base::out | std::ios_base::binary | std::ios_base::trunc;
+    std::ofstream gridStream("grid.bin", mode);
+    for (const auto& elem : m_Grid) {
+        gridStream.write(reinterpret_cast<const char*>(&elem.first), 4);
+        gridStream.write(reinterpret_cast<const char*>(&elem.second), 4);
     }
     m_pLog->info("Saved grid with {} tiles", m_Grid.size());
 }
 
 void RoadData::SaveBinary(std::string filename) {
-    SQLite::Database db(filename, SQLite::OPEN_READWRITE|SQLite::OPEN_CREATE);
-    SaveRoadSegments(db);
-    SaveRoadSegmentIds(db);
-    SaveGrid(db);
+    SaveRoadSegments();
+    SaveRoadSegmentIds();
+    SaveTiles();
+    SaveGrid();
 }
 
 RoadData::~RoadData() {

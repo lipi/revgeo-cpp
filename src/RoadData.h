@@ -55,9 +55,11 @@ private:
     Tile* GetTile(float lat, float lon);
     cdegree_t CDegree(float degree);
 
-    void SaveRoadSegments(SQLite::Database& db);
-    void SaveRoadSegmentIds(SQLite::Database& db);
-    void SaveGrid(SQLite::Database& db);
+    void SaveBlob(void* pData, int size, std::string filename);
+    void SaveRoadSegments();
+    void SaveRoadSegmentIds();
+    void SaveTiles();
+    void SaveGrid();
 
     std::unique_ptr<SQLite::Database> m_pDb;
     std::shared_ptr<spdlog::logger> m_pLog;
