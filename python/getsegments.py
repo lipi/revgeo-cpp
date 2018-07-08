@@ -1,17 +1,19 @@
 #!/usr/bin/python3
 
+import sys
+import logging
+from logging.config import fileConfig
 from collections import defaultdict
 
 import records
 from shapely import wkb
-import numpy as np
 import geojson
 
 """
-Go through all lines in of all road segments in table and
+Go through all lines of all road segments in table and
 add their IDs to tiles being crossed by the line.
 
-There is no overlap between tiles.xf
+There is no overlap between tiles.
 """
 
 RESOLUTION = 0.01
@@ -20,7 +22,8 @@ GRID_PER_DEGREE = 100
 
 def get_road_segments():
     db = records.Database('postgres://lipi@localhost:5432/osm')
-    result = db.query('select osm_id, way from planet_osm_roads where osm_id = 138875524 limit 1')
+#    result = db.query('select osm_id, way from planet_osm_roads where osm_id = 138875524 limit 1')
+    result = db.query('select osm_id, way from planet_osm_roads limit 100')
     return result
 
 
@@ -64,24 +67,31 @@ class Line:
     def gradient(self):
         dx = self.b.x - self.a.x
         dy = self.b.y - self.a.y
-        return dy/dx
+        try:
+            return dy/dx
+        except ZeroDivisionError:
+            return float('inf')  # 10000000000000000  # TODO: float max
 
     def tiles(self):
         """
         Return list of tiles which are intersected by the line
         """
         m = self.gradient()
-        result = [(rasterise(self.a.x), rasterise(self.a.y))]
+        result = set()
+        result.add((rasterise(self.a.x), rasterise(self.a.y)))
+        result.add((rasterise(self.b.x), rasterise(self.b.y)))
 
         for x in crossings(self.a.x, self.b.x):
             y = self.a.y + (x - self.a.x) * m
-            result.append((rasterise(x), rasterise(y)))
+            result.add((rasterise(x), rasterise(y)))
+            result.add((rasterise(x + RESOLUTION), rasterise(y)))
 
         for y in crossings(self.a.y, self.b.y):
             x = self.a.x + (y - self.a.y) / m
-            result.append((rasterise(x), rasterise(y)))
+            result.add((rasterise(x), rasterise(y)))
+            # result.add((rasterise(x), rasterise(y + RESOLUTION)))
 
-        return result
+        return list(result)
 
 
 def tiles_to_geojson(tiles, res=RESOLUTION):
@@ -103,6 +113,11 @@ def tiles_to_geojson(tiles, res=RESOLUTION):
 
 if __name__ == '__main__':
 
+    fileConfig('config.ini')
+    logger = logging.getLogger()
+
+    dump_json = 'json' in sys.argv
+
     tile_map = defaultdict(lambda: defaultdict(list))
     line_features = []
 
@@ -112,21 +127,24 @@ if __name__ == '__main__':
         for i in range(len(coords)-1):
             line = Line(coords[i], coords[i + 1])
             crossed_tiles = line.tiles()
-            print('line: {} | crossed tiles: {}'.format(line, list(crossed_tiles)))
+            logger.debug('line: {} | crossed tiles: {}'.format(line, list(crossed_tiles)))
             for tile in crossed_tiles:
                 tile_map[tile][road.osm_id].append(line)
 
         for tile in tile_map.keys():
-            print('tile: {}'.format(tile))
+            logger.debug('tile: {}'.format(tile))
             for osm_id in tile_map[tile]:
-                print('\tosm_id: {}'.format(osm_id))
+                logger.debug('\tosm_id: {}'.format(osm_id))
                 for line in tile_map[tile][osm_id]:
-                    print('\t\tline: {}'.format(line))
+                    logger.debug('\t\tline: {}'.format(line))
 
-        line_features.append(geojson.Feature(geometry=linestring, properties={'osm_id': road.osm_id}))
+        if dump_json:
+            line_features.append(geojson.Feature(geometry=linestring, properties={'osm_id': road.osm_id}))
 
-    tile_features = tiles_to_geojson(tile_map.keys())
+        # TODO: save tiles to db
 
-    featureColl = geojson.FeatureCollection(features=tile_features + line_features)
-    with open('x.geojson', 'w') as f:
-        f.write(geojson.dumps(featureColl, indent=4, sort_keys=True))
+    if dump_json:
+        tile_features = tiles_to_geojson(tile_map.keys())
+        featureColl = geojson.FeatureCollection(features=tile_features + line_features)
+        with open('x.geojson', 'w') as f:
+            f.write(geojson.dumps(featureColl, indent=4, sort_keys=True))
